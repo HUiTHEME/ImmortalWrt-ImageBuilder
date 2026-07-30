@@ -1,44 +1,56 @@
-name: Build ImmortalWrt
+name: Build ImmortalWrt Firmware
 
 on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
+  workflow_dispatch:   # 手动触发，也可以加 push/schedule 等触发方式
 
 env:
   IMAGEBUILDER_URL: https://downloads.immortalwrt.org/releases/25.12.1/targets/x86/64/immortalwrt-imagebuilder-25.12.1-x86-64.Linux-x86_64.tar.zst
   EXTRA_PACKAGES: luci luci-i18n-base-zh-cn luci-i18n-firewall-zh-cn luci-i18n-package-manager-zh-cn luci-i18n-daed-zh-cn curl nano qemu-ga
+  PROFILE: generic
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
-      - name: Checkout
+      - name: 检出仓库（可选，仅用于放置本 workflow）
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: 安装依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y zstd
+          sudo apt-get install -y build-essential zstd libncurses-dev zlib1g-dev gawk git gettext libssl-dev xsltproc wget unzip python3
 
-      - name: Download ImageBuilder
+      - name: 下载 ImageBuilder
         run: |
           wget -O imagebuilder.tar.zst "$IMAGEBUILDER_URL"
-          tar --zstd -xf imagebuilder.tar.zst
+          mkdir -p imagebuilder
+          tar --use-compress-program=unzstd -xf imagebuilder.tar.zst -C imagebuilder --strip-components=1
 
-      - name: Build firmware
-        shell: bash
+      - name: 写入默认网络配置（uci-defaults）
         run: |
-          set -e
-          IB_DIR="$(find . -maxdepth 1 -type d -name 'immortalwrt-imagebuilder-*' | head -n 1)"
-          [ -n "$IB_DIR" ]
-          make -C "$IB_DIR" image PROFILE="generic" PACKAGES="$EXTRA_PACKAGES" FILES="$GITHUB_WORKSPACE/files"
+          mkdir -p imagebuilder/files/etc/uci-defaults
+          cat > imagebuilder/files/etc/uci-defaults/99-custom-network <<'EOF'
+          #!/bin/sh
+          uci set network.lan.ipaddr='10.0.0.8/24'
+          uci set network.lan.gateway='10.0.0.1'
+          uci -q delete network.lan.dns
+          uci add_list network.lan.dns='10.0.0.1'
+          uci commit network
+          /etc/init.d/network restart
+          exit 0
+          EOF
+          chmod +x imagebuilder/files/etc/uci-defaults/99-custom-network
 
-      - name: Upload artifact
+      - name: 编译固件
+        run: |
+          cd imagebuilder
+          make image PROFILE="$PROFILE" \
+            PACKAGES="$EXTRA_PACKAGES" \
+            FILES="files"
+
+      - name: 上传固件产物
         uses: actions/upload-artifact@v4
         with:
-          name: immortalwrt-x86-64
-          path: |
-            immortalwrt-imagebuilder-*/bin/targets/
+          name: immortalwrt-firmware
+          path: imagebuilder/bin/targets/**/*
