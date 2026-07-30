@@ -68,5 +68,5 @@ jobs:
       - name: 上传固件产物
         uses: actions/upload-artifact@v6
         with:
-          name: immortalwrt-firmware
+          name: openwrt
           path: dist/*
