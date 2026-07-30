@@ -1,4 +1,4 @@
-name: Build ImmortalWrt
+name: Build ImmortalWrt Firmware
 
 on:
   workflow_dispatch:   # 手动触发，也可以加 push/schedule 等触发方式
@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - name: 检出仓库（可选，仅用于放置本 workflow）
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 安装依赖
         run: |
