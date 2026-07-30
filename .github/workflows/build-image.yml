@@ -1,0 +1,44 @@
+name: Build ImmortalWrt
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+env:
+  IMAGEBUILDER_URL: https://downloads.immortalwrt.org/releases/25.12.1/targets/x86/64/immortalwrt-imagebuilder-25.12.1-x86-64.Linux-x86_64.tar.zst
+  EXTRA_PACKAGES: luci luci-i18n-base-zh-cn luci-i18n-firewall-zh-cn luci-i18n-package-manager-zh-cn luci-i18n-daed-zh-cn curl nano qemu-ga
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zstd
+
+      - name: Download ImageBuilder
+        run: |
+          wget -O imagebuilder.tar.zst "$IMAGEBUILDER_URL"
+          tar --zstd -xf imagebuilder.tar.zst
+
+      - name: Build firmware
+        shell: bash
+        run: |
+          set -e
+          IB_DIR="$(find . -maxdepth 1 -type d -name 'immortalwrt-imagebuilder-*' | head -n 1)"
+          [ -n "$IB_DIR" ]
+          make -C "$IB_DIR" image PROFILE="generic" PACKAGES="$EXTRA_PACKAGES" FILES="$GITHUB_WORKSPACE/files"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: immortalwrt-x86-64
+          path: |
+            immortalwrt-imagebuilder-*/bin/targets/
